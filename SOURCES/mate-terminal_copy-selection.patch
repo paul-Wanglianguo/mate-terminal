@@ -1,0 +1,218 @@
+From a6a5774c681f88ebc56b86e2492697549308c52a Mon Sep 17 00:00:00 2001
+From: spuhpointer <madars.vitolins@gmail.com>
+Date: Wed, 10 Sep 2014 08:04:27 +0000
+Subject: Added option to copy selection to clipboard
+
+---
+diff --git a/src/org.mate.terminal.gschema.xml.in b/src/org.mate.terminal.gschema.xml.in
+index 4eb877d..22ef2f3 100644
+--- a/src/org.mate.terminal.gschema.xml.in
++++ b/src/org.mate.terminal.gschema.xml.in
+@@ -128,6 +128,11 @@
+       <summary>Whether to silence terminal bell</summary>
+       <description>If true, don't make a noise when applications send the  escape sequence for the terminal bell.</description>
+     </key>
++    <key name="copy-selection" type="b">
++      <default>false</default>
++      <summary>Copy selection to clipboard</summary>
++      <description>If true, selection is automatically copied to cliboard buffer.</description>
++    </key>
+     <key name="word-chars" type="s">
+       <default>'-A-Za-z0-9,./?%&amp;#:_=+@~'</default>
+       <summary>Characters that are considered "part of a word"</summary>
+diff --git a/src/profile-editor.c b/src/profile-editor.c
+index 8076827..d66b5da 100644
+--- a/src/profile-editor.c
++++ b/src/profile-editor.c
+@@ -242,6 +242,10 @@ profile_notify_sensitivity_cb (TerminalProfile *profile,
+ 		SET_SENSITIVE ("bell-checkbutton",
+ 		               !terminal_profile_property_locked (profile, TERMINAL_PROFILE_SILENT_BELL));
+ 
++	if (!prop_name || prop_name == I_(TERMINAL_PROFILE_COPY_SELECTION))
++		SET_SENSITIVE ("copy-checkbutton",
++		               !terminal_profile_property_locked (profile, TERMINAL_PROFILE_COPY_SELECTION));
++
+ 	if (!prop_name || prop_name == I_(TERMINAL_PROFILE_WORD_CHARS))
+ 		SET_SENSITIVE ("word-chars-entry",
+ 		               !terminal_profile_property_locked (profile, TERMINAL_PROFILE_WORD_CHARS));
+@@ -941,6 +945,8 @@ terminal_profile_edit (TerminalProfile *profile,
+ 	CONNECT ("use-theme-colors-checkbutton", TERMINAL_PROFILE_USE_THEME_COLORS);
+ 	CONNECT ("word-chars-entry", TERMINAL_PROFILE_WORD_CHARS);
+ 	CONNECT_WITH_FLAGS ("bell-checkbutton", TERMINAL_PROFILE_SILENT_BELL, FLAG_INVERT_BOOL);
++	/* CONNECT_WITH_FLAGS ("copy-checkbutton", TERMINAL_PROFILE_COPY_SELECTION, FLAG_INVERT_BOOL); */
++	CONNECT ("copy-checkbutton", TERMINAL_PROFILE_COPY_SELECTION);
+ 
+ #undef CONNECT
+ #undef CONNECT_WITH_FLAGS
+diff --git a/src/profile-preferences.ui b/src/profile-preferences.ui
+index 31a85c2..f278299 100644
+--- a/src/profile-preferences.ui
++++ b/src/profile-preferences.ui
+@@ -458,6 +458,24 @@
+                   </packing>
+                 </child>
+                 <child>
++                  <object class="GtkCheckButton" id="copy-checkbutton">
++                    <property name="visible">True</property>
++                    <property name="can_focus">True</property>
++                    <property name="label" translatable="yes">Copy selected text into _clipboard</property>
++                    <property name="use_underline">True</property>
++                    <property name="relief">GTK_RELIEF_NORMAL</property>
++                    <property name="focus_on_click">True</property>
++                    <property name="active">False</property>
++                    <property name="inconsistent">False</property>
++                    <property name="draw_indicator">True</property>
++                  </object>
++                  <packing>
++                    <property name="padding">0</property>
++                    <property name="expand">False</property>
++                    <property name="fill">False</property>
++                  </packing>
++                </child>
++                <child>
+                   <object class="GtkHBox" id="hbox147">
+                     <property name="visible">True</property>
+                     <property name="homogeneous">False</property>
+diff --git a/src/terminal-profile.c b/src/terminal-profile.c
+index 67ab041..c5f487f 100644
+--- a/src/terminal-profile.c
++++ b/src/terminal-profile.c
+@@ -84,6 +84,7 @@ enum
+     PROP_USE_THEME_COLORS,
+     PROP_VISIBLE_NAME,
+     PROP_WORD_CHARS,
++    PROP_COPY_SELECTION,
+     LAST_PROP
+ };
+ 
+@@ -114,6 +115,7 @@ enum
+ #define KEY_SCROLL_ON_KEYSTROKE "scroll-on-keystroke"
+ #define KEY_SCROLL_ON_OUTPUT "scroll-on-output"
+ #define KEY_SILENT_BELL "silent-bell"
++#define KEY_COPY_SELECTION "copy-selection"
+ #define KEY_TITLE_MODE "title-mode"
+ #define KEY_TITLE "title"
+ #define KEY_UPDATE_RECORDS "update-records"
+@@ -154,6 +156,7 @@ enum
+ #define DEFAULT_SCROLL_ON_KEYSTROKE   (TRUE)
+ #define DEFAULT_SCROLL_ON_OUTPUT      (FALSE)
+ #define DEFAULT_SILENT_BELL           (FALSE)
++#define DEFAULT_COPY_SELECTION        (FALSE)
+ #define DEFAULT_TITLE_MODE            (TERMINAL_TITLE_REPLACE)
+ #define DEFAULT_TITLE                 (N_("Terminal"))
+ #define DEFAULT_UPDATE_RECORDS        (TRUE)
+@@ -1251,6 +1254,7 @@ terminal_profile_class_init (TerminalProfileClass *klass)
+ 	TERMINAL_PROFILE_PROPERTY_BOOLEAN (SCROLL_ON_KEYSTROKE, DEFAULT_SCROLL_ON_KEYSTROKE, KEY_SCROLL_ON_KEYSTROKE);
+ 	TERMINAL_PROFILE_PROPERTY_BOOLEAN (SCROLL_ON_OUTPUT, DEFAULT_SCROLL_ON_OUTPUT, KEY_SCROLL_ON_OUTPUT);
+ 	TERMINAL_PROFILE_PROPERTY_BOOLEAN (SILENT_BELL, DEFAULT_SILENT_BELL, KEY_SILENT_BELL);
++	TERMINAL_PROFILE_PROPERTY_BOOLEAN (COPY_SELECTION, DEFAULT_COPY_SELECTION, KEY_COPY_SELECTION);
+ 	TERMINAL_PROFILE_PROPERTY_BOOLEAN (UPDATE_RECORDS, DEFAULT_UPDATE_RECORDS, KEY_UPDATE_RECORDS);
+ 	TERMINAL_PROFILE_PROPERTY_BOOLEAN (USE_CUSTOM_COMMAND, DEFAULT_USE_CUSTOM_COMMAND, KEY_USE_CUSTOM_COMMAND);
+ 	TERMINAL_PROFILE_PROPERTY_BOOLEAN (USE_CUSTOM_DEFAULT_SIZE, DEFAULT_USE_CUSTOM_DEFAULT_SIZE, KEY_USE_CUSTOM_DEFAULT_SIZE);
+diff --git a/src/terminal-profile.h b/src/terminal-profile.h
+index 0aa2e5e..a60d4c9 100644
+--- a/src/terminal-profile.h
++++ b/src/terminal-profile.h
+@@ -94,6 +94,7 @@ typedef enum
+ #define TERMINAL_PROFILE_SCROLL_ON_KEYSTROKE    "scroll-on-keystroke"
+ #define TERMINAL_PROFILE_SCROLL_ON_OUTPUT       "scroll-on-output"
+ #define TERMINAL_PROFILE_SILENT_BELL            "silent-bell"
++#define TERMINAL_PROFILE_COPY_SELECTION         "copy-selection"
+ #define TERMINAL_PROFILE_TITLE_MODE             "title-mode"
+ #define TERMINAL_PROFILE_TITLE                  "title"
+ #define TERMINAL_PROFILE_UPDATE_RECORDS         "update-records"
+diff --git a/src/terminal-screen.c b/src/terminal-screen.c
+index 2867168..8b587b5 100644
+--- a/src/terminal-screen.c
++++ b/src/terminal-screen.c
+@@ -943,6 +943,11 @@ terminal_screen_profile_notify_cb (TerminalProfile *profile,
+ 		 * update_on_realize
+ 		 */
+ 		terminal_window_update_geometry (window);
++
++		/* madars.vitolins@gmail.com 24/07/2014 -
++		 * update terminal window config
++		 * with the flag of copy selection to cliboard or not. */
++		terminal_window_update_copy_selection(screen, window);
+ 	}
+ 
+ 	if (!prop_name || prop_name == I_(TERMINAL_PROFILE_SCROLLBAR_POSITION))
+diff --git a/src/terminal-window.c b/src/terminal-window.c
+index 4c15774..71984ff 100644
+--- a/src/terminal-window.c
++++ b/src/terminal-window.c
+@@ -100,6 +100,9 @@ struct _TerminalWindowPrivate
+     /* Workaround until gtk+ bug #535557 is fixed */
+     guint icon_title_set : 1;
+     time_t focus_time;
++
++    /* should we copy selection to clibpoard */
++    int copy_selection;
+ };
+ 
+ #define PROFILE_DATA_KEY "GT::Profile"
+@@ -978,6 +981,10 @@ terminal_window_update_copy_sensitivity (TerminalScreen *screen,
+ 
+     action = gtk_action_group_get_action (priv->action_group, "EditCopy");
+     gtk_action_set_sensitive (action, can_copy);
++
++    /* 24/07/2014 madars.vitolins@gmail.com, sync to clibboard */
++    if (priv->copy_selection)
++        vte_terminal_copy_clipboard(VTE_TERMINAL(screen));
+ }
+ 
+ static void
+@@ -2402,16 +2409,17 @@ terminal_window_show (GtkWidget *widget)
+ 
+     gtk_widget_get_allocation (widget, &widget_allocation);
+ 
+-#if 0
+     TerminalWindowPrivate *priv = window->priv;
+ 
+     if (priv->active_screen != NULL)
+     {
++        terminal_window_update_copy_selection (priv->active_screen, window);
++#if 0
+         /* At this point, we have our GdkScreen, and hence the right
+          * font size, so we can go ahead and size the window. */
+         terminal_window_set_size (window, priv->active_screen, FALSE);
+-    }
+ #endif
++    }
+ 
+     terminal_window_update_geometry (window);
+ 
+@@ -3099,6 +3107,16 @@ notebook_page_removed_callback (GtkWidget       *notebook,
+ }
+ 
+ void
++terminal_window_update_copy_selection (TerminalScreen *screen,
++        TerminalWindow *window)
++{
++    TerminalWindowPrivate *priv = window->priv;
++    priv->copy_selection =
++        terminal_profile_get_property_boolean (terminal_screen_get_profile (screen),
++            TERMINAL_PROFILE_COPY_SELECTION);
++}
++
++void
+ terminal_window_update_geometry (TerminalWindow *window)
+ {
+     TerminalWindowPrivate *priv = window->priv;
+diff --git a/src/terminal-window.h b/src/terminal-window.h
+index 0e7b464..b9e8fa7 100644
+--- a/src/terminal-window.h
++++ b/src/terminal-window.h
+@@ -100,6 +100,9 @@ gboolean terminal_window_uses_argb_visual (TerminalWindow *window);
+ void terminal_window_save_state (TerminalWindow *window,
+                                  GKeyFile *key_file,
+                                  const char *group);
++void
++terminal_window_update_copy_selection (TerminalScreen *screen,
++                                       TerminalWindow *window);
+ 
+ TerminalWindow *terminal_window_get_latest_focused (TerminalWindow *window1,
+                                                     TerminalWindow *window2);
+--
+cgit 
+
