@@ -1,0 +1,234 @@
+From e05969253c6a462f8742be4c88ee5db6b8b95bcd Mon Sep 17 00:00:00 2001
+From: wanglianguo <wanglianguo@loongson.cn>
+Date: Thu, 7 Sep 2017 14:57:58 +0800
+Subject: [PATCH] add var tmp fun
+
+---
+ po/zh_CN.po                          | 16 ++++++++++------
+ src/org.mate.terminal.gschema.xml.in |  5 +++++
+ src/profile-editor.c                 | 17 +++++++++++++++++
+ src/profile-preferences.ui           | 20 ++++++++++++++++++++
+ src/terminal-profile.c               |  4 ++++
+ src/terminal-profile.h               |  1 +
+ src/terminal-screen.c                | 12 ++++++++++++
+ 7 files changed, 69 insertions(+), 6 deletions(-)
+
+diff --git a/po/zh_CN.po b/po/zh_CN.po
+index 6adde03..ca8f1fc 100644
+--- a/po/zh_CN.po
++++ b/po/zh_CN.po
+@@ -561,14 +561,18 @@ msgid "_Unlimited"
+ msgstr "不限制(_U)"
+ 
+ #: ../src/profile-preferences.ui.h:83
++msgid "_Using_var_tmp"
++msgstr "使用/var/tmp(不限制回滚行数)"
++
++#: ../src/profile-preferences.ui.h:84
+ msgid "lines"
+ msgstr "行"
+ 
+-#: ../src/profile-preferences.ui.h:84
++#: ../src/profile-preferences.ui.h:85
+ msgid "Scrolling"
+ msgstr "滚动"
+ 
+-#: ../src/profile-preferences.ui.h:85
++#: ../src/profile-preferences.ui.h:86
+ msgid ""
+ "<small><i><b>Note:</b> These options may cause some applications to behave "
+ "incorrectly.  They are only here to allow you to work around certain "
+@@ -576,19 +580,19 @@ msgid ""
+ "behavior.</i></small>"
+ msgstr "<small><i><b>注意：</b>这些选项可能造成一些应用程序产生不正确的行为。仅用于允许您在一些应用程序和操作系统中作调整以获得不同的终端行为。</i></small>"
+ 
+-#: ../src/profile-preferences.ui.h:86
++#: ../src/profile-preferences.ui.h:87
+ msgid "_Delete key generates:"
+ msgstr "按 _Delete 键产生："
+ 
+-#: ../src/profile-preferences.ui.h:87
++#: ../src/profile-preferences.ui.h:88
+ msgid "_Backspace key generates:"
+ msgstr "按 _Backspace 键产生："
+ 
+-#: ../src/profile-preferences.ui.h:88
++#: ../src/profile-preferences.ui.h:89
+ msgid "_Reset Compatibility Options to Defaults"
+ msgstr "重置兼容性选项为默认值(_R)"
+ 
+-#: ../src/profile-preferences.ui.h:89
++#: ../src/profile-preferences.ui.h:90
+ msgid "Compatibility"
+ msgstr "兼容性"
+ 
+diff --git a/src/org.mate.terminal.gschema.xml.in b/src/org.mate.terminal.gschema.xml.in
+index 238fc7e..190429e 100644
+--- a/src/org.mate.terminal.gschema.xml.in
++++ b/src/org.mate.terminal.gschema.xml.in
+@@ -168,6 +168,11 @@
+       <summary>Whether an unlimited number of lines should be kept in scrollback</summary>
+       <description>If true, scrollback lines will never be discarded.  The scrollback history is stored on disk temporarily, so this may cause the system to run out of disk space if there is a lot of output to the terminal.</description>
+     </key>
++    <key name="scrollback-file-tmp-in-var-tmp-checkbutton" type="b">
++      <default>true</default>
++      <summary>Whether an unlimited number of lines should be kept in scrollback</summary>
++      <description>If true, scrollback lines will never be discarded.  The scrollback history is stored on disk temporarily, so this may cause the system to run out of disk space if there is a lot of output to the terminal.</description>
++    </key>
+     <key name="scroll-on-keystroke" type="b">
+       <default>true</default>
+       <summary>Whether to scroll to the bottom when a key is pressed</summary>
+diff --git a/src/profile-editor.c b/src/profile-editor.c
+index 9ad79f2..f22d9d6 100644
+--- a/src/profile-editor.c
++++ b/src/profile-editor.c
+@@ -286,6 +286,21 @@ profile_notify_sensitivity_cb (TerminalProfile *profile,
+ 		SET_SENSITIVE ("scrollback-unlimited-checkbutton", !scrollback_lines_locked && !scrollback_unlimited_locked);
+ 	}
+ 
++        if (!prop_name ||
++                prop_name == I_(TERMINAL_PROFILE_SCROLLBACK_FILE_TMP_IN_VAR_TMP) )
++        {
++
++		gboolean scrollback_lines_locked = terminal_profile_property_locked (profile, TERMINAL_PROFILE_SCROLLBACK_LINES);
++		gboolean scrollback_unlimited = terminal_profile_get_property_boolean (profile, TERMINAL_PROFILE_SCROLLBACK_UNLIMITED);
++                gboolean scrollback_file_tmp_in_var_tmp_locked = terminal_profile_property_locked (profile, TERMINAL_PROFILE_SCROLLBACK_FILE_TMP_IN_VAR_TMP );
++                gboolean scrollback_file_tmp_in_var_tmp = terminal_profile_get_property_boolean (profile, TERMINAL_PROFILE_SCROLLBACK_FILE_TMP_IN_VAR_TMP );
++
++		SET_SENSITIVE ("scrollback-label", !scrollback_lines_locked);
++		SET_SENSITIVE ("scrollback-box", !scrollback_lines_locked && !scrollback_unlimited  && !scrollback_file_tmp_in_var_tmp);
++		SET_SENSITIVE ("scrollback-unlimited-checkbutton", !scrollback_lines_locked && !scrollback_file_tmp_in_var_tmp);
++                SET_SENSITIVE ("scrollback-file-tmp-in-var-tmp-checkbutton", !scrollback_lines_locked && !scrollback_file_tmp_in_var_tmp_locked);
++        }
++
+ 	if (!prop_name || prop_name == I_(TERMINAL_PROFILE_SCROLL_ON_KEYSTROKE))
+ 		SET_SENSITIVE ("scroll-on-keystroke-checkbutton",
+ 		               !terminal_profile_property_locked (profile, TERMINAL_PROFILE_SCROLL_ON_KEYSTROKE));
+@@ -776,6 +791,7 @@ terminal_profile_editor_focus_widget (GtkWidget *editor,
+  * If @widget_name is non-%NULL, focuses the corresponding widget and
+  * switches the notebook to its containing page.
+  */
++
+ void
+ terminal_profile_edit (TerminalProfile *profile,
+                        GtkWindow       *transient_parent,
+@@ -931,6 +947,7 @@ terminal_profile_edit (TerminalProfile *profile,
+ 	CONNECT ("profile-name-entry", TERMINAL_PROFILE_VISIBLE_NAME);
+ 	CONNECT ("scrollback-lines-spinbutton", TERMINAL_PROFILE_SCROLLBACK_LINES);
+ 	CONNECT ("scrollback-unlimited-checkbutton", TERMINAL_PROFILE_SCROLLBACK_UNLIMITED);
++	CONNECT ("scrollback-file-tmp-in-var-tmp-checkbutton", TERMINAL_PROFILE_SCROLLBACK_FILE_TMP_IN_VAR_TMP);
+ 	CONNECT ("scroll-background-checkbutton", TERMINAL_PROFILE_SCROLL_BACKGROUND);
+ 	CONNECT ("scrollbar-position-combobox", TERMINAL_PROFILE_SCROLLBAR_POSITION);
+ 	CONNECT ("scroll-on-keystroke-checkbutton", TERMINAL_PROFILE_SCROLL_ON_KEYSTROKE);
+diff --git a/src/profile-preferences.ui b/src/profile-preferences.ui
+index b7b6c10..6ac7706 100644
+--- a/src/profile-preferences.ui
++++ b/src/profile-preferences.ui
+@@ -2614,6 +2614,26 @@
+                   </packing>
+                 </child>
+                 <child>
++                  <object class="GtkCheckButton" id="scrollback-file-tmp-in-var-tmp-checkbutton">
++                    <property name="visible">True</property>
++                    <property name="can_focus">True</property>
++                    <property name="label" translatable="yes">_Using_var_tmp</property>
++                    <property name="use_underline">True</property>
++                    <property name="relief">GTK_RELIEF_NORMAL</property>
++                    <property name="focus_on_click">True</property>
++                    <property name="active">False</property>
++                    <property name="inconsistent">False</property>
++                    <property name="draw_indicator">True</property>
++                  </object>
++                  <packing>
++                    <property name="left_attach">2</property>
++                    <property name="right_attach">3</property>
++                    <property name="top_attach">2</property>
++                    <property name="bottom_attach">3</property>
++                    <property name="y_options"/>
++                  </packing>
++                </child>
++                <child>
+                   <object class="GtkHBox" id="hbox139">
+                     <property name="visible">True</property>
+                     <property name="homogeneous">False</property>
+diff --git a/src/terminal-profile.c b/src/terminal-profile.c
+index 1d763a5..7e5dfa6 100644
+--- a/src/terminal-profile.c
++++ b/src/terminal-profile.c
+@@ -70,6 +70,7 @@ enum
+     PROP_SCROLL_BACKGROUND,
+     PROP_SCROLLBACK_LINES,
+     PROP_SCROLLBACK_UNLIMITED,
++    PROP_SCROLLBACK_FILE_TMP_IN_VAR_TMP,
+     PROP_SCROLLBAR_POSITION,
+     PROP_SCROLL_ON_KEYSTROKE,
+     PROP_SCROLL_ON_OUTPUT,
+@@ -111,6 +112,7 @@ enum
+ #define KEY_SCROLL_BACKGROUND "scroll-background"
+ #define KEY_SCROLLBACK_LINES "scrollback-lines"
+ #define KEY_SCROLLBACK_UNLIMITED "scrollback-unlimited"
++#define KEY_SCROLLBACK_FILE_TMP_IN_VAR_TMP_CHECKBUTTON "scrollback-file-tmp-in-var-tmp-checkbutton"
+ #define KEY_SCROLLBAR_POSITION "scrollbar-position"
+ #define KEY_SCROLL_ON_KEYSTROKE "scroll-on-keystroke"
+ #define KEY_SCROLL_ON_OUTPUT "scroll-on-output"
+@@ -153,6 +155,7 @@ enum
+ #define DEFAULT_SCROLL_BACKGROUND     (TRUE)
+ #define DEFAULT_SCROLLBACK_LINES      (512)
+ #define DEFAULT_SCROLLBACK_UNLIMITED  (TRUE)
++#define DEFAULT_SCROLLBACK_FILE_TMP_IN_VAR_TMP_CHECKBUTTON (FALSE)
+ #define DEFAULT_SCROLLBAR_POSITION    (TERMINAL_SCROLLBAR_RIGHT)
+ #define DEFAULT_SCROLL_ON_KEYSTROKE   (TRUE)
+ #define DEFAULT_SCROLL_ON_OUTPUT      (FALSE)
+@@ -1252,6 +1255,7 @@ terminal_profile_class_init (TerminalProfileClass *klass)
+ 	TERMINAL_PROFILE_PROPERTY_BOOLEAN (LOGIN_SHELL, DEFAULT_LOGIN_SHELL, KEY_LOGIN_SHELL);
+ 	TERMINAL_PROFILE_PROPERTY_BOOLEAN (SCROLL_BACKGROUND, DEFAULT_SCROLL_BACKGROUND, KEY_SCROLL_BACKGROUND);
+ 	TERMINAL_PROFILE_PROPERTY_BOOLEAN (SCROLLBACK_UNLIMITED, DEFAULT_SCROLLBACK_UNLIMITED, KEY_SCROLLBACK_UNLIMITED);
++	TERMINAL_PROFILE_PROPERTY_BOOLEAN (SCROLLBACK_FILE_TMP_IN_VAR_TMP, DEFAULT_SCROLLBACK_FILE_TMP_IN_VAR_TMP_CHECKBUTTON, KEY_SCROLLBACK_FILE_TMP_IN_VAR_TMP_CHECKBUTTON);
+ 	TERMINAL_PROFILE_PROPERTY_BOOLEAN (SCROLL_ON_KEYSTROKE, DEFAULT_SCROLL_ON_KEYSTROKE, KEY_SCROLL_ON_KEYSTROKE);
+ 	TERMINAL_PROFILE_PROPERTY_BOOLEAN (SCROLL_ON_OUTPUT, DEFAULT_SCROLL_ON_OUTPUT, KEY_SCROLL_ON_OUTPUT);
+ 	TERMINAL_PROFILE_PROPERTY_BOOLEAN (SILENT_BELL, DEFAULT_SILENT_BELL, KEY_SILENT_BELL);
+diff --git a/src/terminal-profile.h b/src/terminal-profile.h
+index a60d4c9..5fa8e05 100644
+--- a/src/terminal-profile.h
++++ b/src/terminal-profile.h
+@@ -89,6 +89,7 @@ typedef enum
+ #define TERMINAL_PROFILE_PALETTE                "palette"
+ #define TERMINAL_PROFILE_SCROLL_BACKGROUND      "scroll-background"
+ #define TERMINAL_PROFILE_SCROLLBACK_LINES       "scrollback-lines"
++#define TERMINAL_PROFILE_SCROLLBACK_FILE_TMP_IN_VAR_TMP   "scrollback-file-tmp-in-var-tmp"
+ #define TERMINAL_PROFILE_SCROLLBACK_UNLIMITED   "scrollback-unlimited"
+ #define TERMINAL_PROFILE_SCROLLBAR_POSITION     "scrollbar-position"
+ #define TERMINAL_PROFILE_SCROLL_ON_KEYSTROKE    "scroll-on-keystroke"
+diff --git a/src/terminal-screen.c b/src/terminal-screen.c
+index a5fcc57..ec06475 100644
+--- a/src/terminal-screen.c
++++ b/src/terminal-screen.c
+@@ -989,6 +989,8 @@ terminal_screen_profile_notify_cb (TerminalProfile *profile,
+ 	if (!prop_name || prop_name == I_(TERMINAL_PROFILE_SCROLL_ON_OUTPUT))
+ 		vte_terminal_set_scroll_on_output (vte_terminal,
+ 		                                   terminal_profile_get_property_boolean (profile, TERMINAL_PROFILE_SCROLL_ON_OUTPUT));
++
++
+ 	if (!prop_name ||
+ 	        prop_name == I_(TERMINAL_PROFILE_SCROLLBACK_LINES) ||
+ 	        prop_name == I_(TERMINAL_PROFILE_SCROLLBACK_UNLIMITED))
+@@ -998,6 +1000,16 @@ terminal_screen_profile_notify_cb (TerminalProfile *profile,
+ 		vte_terminal_set_scrollback_lines (vte_terminal, lines);
+ 	}
+ 
++
++	if (!prop_name || prop_name == I_(TERMINAL_PROFILE_SCROLLBACK_FILE_TMP_IN_VAR_TMP) )
++	{
++		vte_terminal_set_scrollback_lines (vte_terminal, -1);
++		if (  terminal_profile_get_property_boolean (profile,TERMINAL_PROFILE_SCROLLBACK_FILE_TMP_IN_VAR_TMP) )
++			vte_terminal_use_var_tmp() ;
++		else
++			vte_terminal_use_tmp() ;
++	}
++
+ #ifdef ENABLE_SKEY
+ 	if (!prop_name || prop_name == I_(TERMINAL_PROFILE_USE_SKEY))
+ 	{
+-- 
+2.1.0
+

@@ -1,7 +1,7 @@
 Summary:        Terminal emulator for MATE
 Name:           mate-terminal
 Version:        1.8.1
-Release:        1%{?dist}
+Release:        2%{?dist}
 License:        GPLv3+
 URL:            http://mate-desktop.org
 Source0:        http://pub.mate-desktop.org/releases/1.8/%{name}-%{version}.tar.xz
@@ -10,6 +10,8 @@ Source0:        http://pub.mate-desktop.org/releases/1.8/%{name}-%{version}.tar.
 Patch0:        mate-terminal_better_defaults.patch
 # http://git.mate-desktop.org/mate-terminal/commit/?id=a6a5774
 Patch1:        mate-terminal_copy-selection.patch
+# add var tmp support
+Patch2:        mate-terminal_add_var_tmp_support.patch
 
 BuildRequires: dconf-devel
 BuildRequires: desktop-file-utils
@@ -32,6 +34,7 @@ clickable URLs.
 %setup -q
 %patch0 -p1
 %patch1 -p1
+%patch2 -p1
 
 %build
 %configure --disable-static                \
@@ -72,6 +75,9 @@ fi
 
 
 %changelog
+* Thu Sep 7 2017  add var tmp support - 1.8.1-2
+- wanglianguo@loongson.cn
+
 * Thu Oct 02 2014 Wolfgang Ulbrich <chat-to-me@raveit.de> - 1.8.1-1
 - update to 1.8.1 release
 - added option to copy selection to clipboard
